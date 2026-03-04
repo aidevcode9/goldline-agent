@@ -15,3 +15,10 @@ dependencies = [
 
 [project.scripts]
 goldline = "src.cli:main"
+
+[tool.uv]
+package = true
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
