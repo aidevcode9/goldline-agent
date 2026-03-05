@@ -62,9 +62,13 @@ SEARCH_KNOWLEDGE_BASE_TOOL: ToolParam = {
 ALL_TOOLS: list[ToolParam] = [QUERY_DATABASE_TOOL, SEARCH_KNOWLEDGE_BASE_TOOL]
 
 
+# Column names that should have their values replaced with stock labels
+_QUANTITY_COLUMNS = {"quantity", "stock", "qty", "inventory", "count"}
+
+
 def _classify_stock(quantity: int) -> str:
     """Convert raw quantity to a stock-level label (never expose exact numbers)."""
-    if quantity == 0:
+    if quantity <= 0:
         return "out_of_stock"
     if quantity <= 4:
         return "very_limited"
@@ -75,22 +79,45 @@ def _classify_stock(quantity: int) -> str:
     return "in_stock"
 
 
-def _sanitize_results(rows: list[tuple]) -> list[tuple]:
-    """Replace numeric quantity columns with stock-level labels.
+def _sanitize_results(
+    rows: list[tuple],
+    column_names: list[str] | None = None,
+) -> list[tuple]:
+    """Replace quantity column values with stock-level labels.
 
-    Heuristic: any integer column named 'quantity' or 'stock' will have its
-    value replaced. Since we don't have column names from fetchall(), we
-    apply the heuristic to all integer values in the result set. This is
-    conservative — prices (floats) pass through unchanged.
+    If column_names are provided (from cursor.description), only columns
+    whose names match _QUANTITY_COLUMNS are sanitized. Otherwise falls back
+    to sanitizing all integer values (conservative).
     """
+    if not rows:
+        return []
+
+    # Determine which column indices to sanitize
+    if column_names:
+        sanitize_indices = {
+            i for i, name in enumerate(column_names)
+            if name.lower() in _QUANTITY_COLUMNS
+        }
+    else:
+        sanitize_indices = None  # fallback: sanitize all integers
+
     sanitized = []
     for row in rows:
-        new_row = tuple(
-            _classify_stock(val) if isinstance(val, int) and not isinstance(val, bool)
-            else val
-            for val in row
-        )
-        sanitized.append(new_row)
+        new_row = []
+        for i, val in enumerate(row):
+            if sanitize_indices is not None:
+                # Column-aware: only sanitize identified quantity columns
+                if i in sanitize_indices and isinstance(val, int):
+                    new_row.append(_classify_stock(val))
+                else:
+                    new_row.append(val)
+            else:
+                # Fallback: sanitize all integers (except booleans)
+                if isinstance(val, int) and not isinstance(val, bool):
+                    new_row.append(_classify_stock(val))
+                else:
+                    new_row.append(val)
+        sanitized.append(tuple(new_row))
     return sanitized
 
 
@@ -105,8 +132,16 @@ def query_database(query: str, db_path: str) -> str:
         cursor = conn.cursor()
         cursor.execute(query)
         results = cursor.fetchall()
+
+        # Extract column names from cursor.description when available
+        column_names = (
+            [desc[0] for desc in cursor.description]
+            if cursor.description
+            else None
+        )
+
         conn.close()
-        return str(_sanitize_results(results))
+        return str(_sanitize_results(results, column_names))
     except Exception as e:
         logger.exception("Database query failed")
         return "Database query failed. Please try a different query."

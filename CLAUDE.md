@@ -44,5 +44,10 @@ Uses LangSmith for tracing, OpenAI for embeddings, SQLite for inventory.
 - Don't modify knowledge base docs without regenerating embeddings (happens automatically on next run)
 
 ## Testing
+- Unit tests: `uv run pytest tests/ -m "not eval" -v`
+- LLM evals: `uv run pytest tests/evals/ -m eval -v` (requires ANTHROPIC_API_KEY)
+- All tests: `uv run pytest tests/ -v`
+- Test files mirror source: `src/tools.py` → `tests/test_tools.py`
+- Evals in `tests/evals/` — test LLM behavior (tool routing, stock leakage, scope, brand)
 - Manual: run the agent and test product queries, policy questions, multi-turn conversation
 - Verify LangSmith traces appear in the `goldline-agent` project
