@@ -11,10 +11,14 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "numpy>=1.24.0",
     "rich>=13.0.0",
+    "fastapi>=0.135.1",
+    "uvicorn>=0.41.0",
+    "sse-starlette>=3.3.2",
 ]
 
 [project.scripts]
 goldline = "src.cli:main"
+goldline-api = "uvicorn:main"
 
 [tool.uv]
 package = true
