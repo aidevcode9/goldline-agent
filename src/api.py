@@ -58,8 +58,9 @@ async def health():
 @app.post("/chat")
 async def chat(req: ChatRequest):
     """Non-streaming chat endpoint."""
-    result = await agent.chat(req.message)
-    return {"response": result["output"], "thread_id": agent.thread_id}
+    tid = req.thread_id or new_thread_id()
+    result = await agent.chat(req.message, tid=tid)
+    return {"response": result["output"], "thread_id": result["thread_id"]}
 
 
 @app.post("/chat/stream")

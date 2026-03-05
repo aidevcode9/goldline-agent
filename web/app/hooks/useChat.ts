@@ -20,6 +20,7 @@ interface UseChatReturn {
   isLoading: boolean;
   stats: { latency_ms: number; input_tokens: number; output_tokens: number; tool_calls: number } | null;
   sendMessage: (message: string) => void;
+  resetChat: () => void;
 }
 
 const TRACE_EVENTS = new Set(["thinking", "tool_call", "tool_result", "error"]);
@@ -69,6 +70,7 @@ export function useChat(): UseChatReturn {
       let dataLines: string[] = [];
 
       const dispatchEvent = () => {
+        if (controller.signal.aborted) return;
         if (!eventType || dataLines.length === 0) return;
         const dataStr = dataLines.join("\n");
         try {
@@ -87,6 +89,9 @@ export function useChat(): UseChatReturn {
           if (eventType === "text") {
             assistantContent = data.content;
           } else if (eventType === "done") {
+            if (data.thread_id) {
+              threadId.current = data.thread_id;
+            }
             setStats({
               latency_ms: data.total_latency_ms,
               input_tokens: data.input_tokens,
@@ -147,5 +152,15 @@ export function useChat(): UseChatReturn {
     }
   }, []);
 
-  return { messages, traceEvents, isLoading, stats, sendMessage };
+  const resetChat = useCallback(() => {
+    abortRef.current?.abort();
+    setMessages([]);
+    setTraceEvents([]);
+    setStats(null);
+    threadId.current = null;
+    eventCounter.current = 0;
+    setIsLoading(false);
+  }, []);
+
+  return { messages, traceEvents, isLoading, stats, sendMessage, resetChat };
 }

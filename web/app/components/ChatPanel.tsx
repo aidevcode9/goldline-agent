@@ -9,6 +9,7 @@ interface ChatPanelProps {
   messages: ChatMessage[];
   isLoading: boolean;
   onSend: (message: string) => void;
+  onReset: () => void;
 }
 
 function isSafeHref(url: string): boolean {
@@ -40,7 +41,7 @@ function renderContent(content: string) {
   });
 }
 
-export default function ChatPanel({ messages, isLoading, onSend }: ChatPanelProps) {
+export default function ChatPanel({ messages, isLoading, onSend, onReset }: ChatPanelProps) {
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -63,10 +64,19 @@ export default function ChatPanel({ messages, isLoading, onSend }: ChatPanelProp
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500/20 text-amber-400 text-sm font-bold">
           GL
         </div>
-        <div>
+        <div className="flex-1">
           <h2 className="text-sm font-semibold text-zinc-100">GoldLine Assistant</h2>
           <p className="text-xs text-zinc-500">Office Supplies Support</p>
         </div>
+        {messages.length > 0 && (
+          <button
+            onClick={onReset}
+            disabled={isLoading}
+            className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-400 transition-colors hover:border-amber-500/50 hover:text-amber-400 disabled:opacity-40"
+          >
+            New Chat
+          </button>
+        )}
       </div>
 
       {/* Messages */}

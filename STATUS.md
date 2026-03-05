@@ -3,18 +3,21 @@
 Last updated: 2026-03-04
 
 ## Now
-- Polish web UI, end-to-end testing with live API
+- End-to-end testing with live API, demo polish
 
 ## Next
 - Deploy (Vercel frontend + API hosting)
-- Add conversation history persistence to web UI
+- Add LRU/TTL eviction to in-memory thread store (production hardening)
 
 ## Done (This Week)
+- Added conversational memory — thread_id plumbing between backend/frontend, "New Chat" button
+- Added PDF quote generator tool (generate_quote) with branded PDFs, security hardening
+- Expanded product catalog from 15 to 215 items across 18 categories
 - Built Next.js frontend with Agent Reasoning View (split-screen: chat + trace)
 - Created FastAPI backend with SSE streaming (/chat/stream endpoint)
 - Added ChatPanel, TracePanel, useChat hook with AbortController
 - Adversarial review: fixed SSE parser, XSS prevention, accessibility
-- Unit tests (47 passing) + LLM evals (7)
+- Unit tests (59 passing) + LLM evals (7)
 - Refactored agent.py into SOLID modules (knowledge, tools, prompts, history)
 - Fixed 2 CRITICAL + 5 HIGH security issues from adversarial review
 

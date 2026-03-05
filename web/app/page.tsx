@@ -5,7 +5,7 @@ import ChatPanel from "./components/ChatPanel";
 import TracePanel from "./components/TracePanel";
 
 export default function Home() {
-  const { messages, traceEvents, isLoading, stats, sendMessage } = useChat();
+  const { messages, traceEvents, isLoading, stats, sendMessage, resetChat } = useChat();
 
   return (
     <div className="flex h-screen flex-col">
@@ -28,7 +28,7 @@ export default function Home() {
       <div className="flex flex-1 overflow-hidden">
         {/* Left: Chat */}
         <div className="flex w-1/2 flex-col border-r border-zinc-800">
-          <ChatPanel messages={messages} isLoading={isLoading} onSend={sendMessage} />
+          <ChatPanel messages={messages} isLoading={isLoading} onSend={sendMessage} onReset={resetChat} />
         </div>
 
         {/* Right: Trace */}

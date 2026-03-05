@@ -52,12 +52,13 @@ def _truncate_history(messages: list) -> list:
     return messages[-MAX_HISTORY_MESSAGES:]
 
 
-@traceable(name=AGENT_NAME, metadata={"thread_id": thread_id})
-async def chat(question: str) -> dict:
+@traceable(name=AGENT_NAME, run_type="chain")
+async def chat(question: str, tid: str | None = None) -> dict:
     """Process a user question and return assistant response."""
+    tid = tid or thread_id
     db_path = str(Path(__file__).parent.parent / "inventory" / "inventory.db")
 
-    history = _truncate_history(get_messages(thread_id))
+    history = _truncate_history(get_messages(tid))
     messages = history + [{"role": "user", "content": question}]
 
     try:
@@ -114,9 +115,9 @@ async def chat(question: str) -> dict:
         )
 
     messages.append({"role": "assistant", "content": final_content})
-    save_messages(thread_id, messages)
+    save_messages(tid, messages)
 
-    return {"messages": messages, "output": final_content}
+    return {"messages": messages, "output": final_content, "thread_id": tid}
 
 
 async def chat_stream(
@@ -235,6 +236,7 @@ async def chat_stream(
     yield {
         "event": "done",
         "data": {
+            "thread_id": tid,
             "total_latency_ms": total_latency,
             "input_tokens": total_input_tokens,
             "output_tokens": total_output_tokens,
