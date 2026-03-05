@@ -1,0 +1,146 @@
+[
+  {
+    "id": "product_search_paper",
+    "input": "Do you have any copy paper?",
+    "expected_tools": ["query_database"],
+    "forbidden_tools": [],
+    "response_must_contain_any": ["paper", "copy", "stock", "available"],
+    "response_must_not_contain": [],
+    "description": "Basic product search should use database and mention paper"
+  },
+  {
+    "id": "product_search_pens",
+    "input": "What kind of pens do you sell?",
+    "expected_tools": ["query_database"],
+    "forbidden_tools": ["search_knowledge_base"],
+    "response_must_contain_any": ["pen", "writing", "ink"],
+    "response_must_not_contain": [],
+    "description": "Pen search should use database, not knowledge base"
+  },
+  {
+    "id": "product_search_toner",
+    "input": "I need toner for my HP printer",
+    "expected_tools": ["query_database"],
+    "forbidden_tools": [],
+    "response_must_contain_any": ["toner", "ink", "printer"],
+    "response_must_not_contain": [],
+    "description": "Toner search should query database"
+  },
+  {
+    "id": "policy_returns",
+    "input": "What is your return policy?",
+    "expected_tools": ["search_knowledge_base"],
+    "forbidden_tools": [],
+    "response_must_contain_any": ["return", "refund", "exchange", "returns@", "policy"],
+    "response_must_not_contain": [],
+    "description": "Return policy should use knowledge base"
+  },
+  {
+    "id": "policy_shipping",
+    "input": "How long does shipping take?",
+    "expected_tools": ["search_knowledge_base"],
+    "forbidden_tools": ["query_database"],
+    "response_must_contain_any": ["shipping", "delivery", "days", "business"],
+    "response_must_not_contain": [],
+    "description": "Shipping question should use knowledge base"
+  },
+  {
+    "id": "policy_ordering",
+    "input": "What is the process for placing an order?",
+    "expected_tools": ["search_knowledge_base"],
+    "forbidden_tools": [],
+    "response_must_contain_any": ["order", "portal", "sales@", "goldlineoffice", "place", "purchase", "online"],
+    "response_must_not_contain": [],
+    "description": "Ordering process should use knowledge base"
+  },
+  {
+    "id": "quote_single_item",
+    "input": "Can I get a quote for 20 reams of copy paper?",
+    "expected_tools": ["query_database", "generate_quote"],
+    "forbidden_tools": [],
+    "response_must_contain_any": ["GQ-", "quote", "download"],
+    "response_must_not_contain": [],
+    "description": "Quote request should trigger both DB lookup and quote generation"
+  },
+  {
+    "id": "quote_multi_item",
+    "input": "I need a price quote for 50 pens and 10 notebooks",
+    "expected_tools": ["query_database", "generate_quote"],
+    "forbidden_tools": [],
+    "response_must_contain_any": ["GQ-", "quote"],
+    "response_must_not_contain": [],
+    "description": "Multi-item quote should generate PDF"
+  },
+  {
+    "id": "greeting_simple",
+    "input": "Hello!",
+    "expected_tools": [],
+    "forbidden_tools": ["query_database", "search_knowledge_base", "generate_quote"],
+    "response_must_contain_any": ["hello", "hi", "welcome", "help", "goldline", "aria"],
+    "response_must_not_contain": [],
+    "description": "Simple greeting should not trigger any tools"
+  },
+  {
+    "id": "scope_order_placement",
+    "input": "I'd like to place an order for 500 file folders",
+    "expected_tools": [],
+    "forbidden_tools": [],
+    "response_must_contain_any": ["sales@", "portal", "goldlineoffice", "order", "contact", "sales", "representative"],
+    "response_must_not_contain": [],
+    "description": "Order placement should be redirected to sales"
+  },
+  {
+    "id": "scope_account_changes",
+    "input": "I need to update my billing address",
+    "expected_tools": [],
+    "forbidden_tools": [],
+    "response_must_contain_any": ["accounts@", "account"],
+    "response_must_not_contain": [],
+    "description": "Account changes should redirect to accounts dept"
+  },
+  {
+    "id": "scope_tech_support",
+    "input": "Your website is showing an error when I try to log in",
+    "expected_tools": [],
+    "forbidden_tools": [],
+    "response_must_contain_any": ["support@", "technical"],
+    "response_must_not_contain": [],
+    "description": "Tech issues should redirect to support"
+  },
+  {
+    "id": "brand_identity",
+    "input": "Tell me about your company",
+    "expected_tools": ["search_knowledge_base"],
+    "forbidden_tools": [],
+    "response_must_contain_any": ["GoldLine"],
+    "response_must_not_contain": ["OfficeFlow"],
+    "description": "Company info should mention GoldLine, never OfficeFlow"
+  },
+  {
+    "id": "price_inquiry",
+    "input": "How much do sticky notes cost?",
+    "expected_tools": ["query_database"],
+    "forbidden_tools": [],
+    "response_must_contain_any": ["$", "sticky", "note"],
+    "response_must_not_contain": [],
+    "description": "Price question should query database and include dollar amount"
+  },
+  {
+    "id": "stock_language_check",
+    "input": "Is the Blue Pens 12-pack in stock?",
+    "expected_tools": ["query_database"],
+    "forbidden_tools": [],
+    "response_must_contain_any": ["stock", "available", "limited", "few", "pen", "blue", "yes", "have"],
+    "response_must_not_contain": [],
+    "description": "Stock check should use qualitative language, not exact numbers"
+  },
+  {
+    "id": "recommendation",
+    "input": "What do you recommend for a small office that needs basic supplies?",
+    "expected_tools": ["query_database"],
+    "forbidden_tools": [],
+    "response_must_contain_any": ["recommend", "suggest", "paper", "pen", "essential", "office", "supplies", "product"],
+    "response_must_not_contain": [],
+    "description": "Recommendation should query DB and suggest relevant products"
+  }
+]
