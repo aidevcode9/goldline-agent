@@ -65,6 +65,43 @@ export function useChat(): UseChatReturn {
       const decoder = new TextDecoder();
       let buffer = "";
       let assistantContent = "";
+      let eventType = "";
+      let dataLines: string[] = [];
+
+      const dispatchEvent = () => {
+        if (!eventType || dataLines.length === 0) return;
+        const dataStr = dataLines.join("\n");
+        try {
+          const data = JSON.parse(dataStr);
+
+          if (TRACE_EVENTS.has(eventType)) {
+            const traceEvent: TraceEvent = {
+              id: `evt-${eventCounter.current++}`,
+              event: eventType,
+              data,
+              timestamp: Date.now(),
+            };
+            setTraceEvents((prev) => [...prev, traceEvent]);
+          }
+
+          if (eventType === "text") {
+            assistantContent = data.content;
+          } else if (eventType === "done") {
+            setStats({
+              latency_ms: data.total_latency_ms,
+              input_tokens: data.input_tokens,
+              output_tokens: data.output_tokens,
+              tool_calls: data.tool_calls,
+            });
+          } else if (eventType === "error") {
+            assistantContent = data.message;
+          }
+        } catch {
+          // skip malformed JSON
+        }
+        eventType = "";
+        dataLines = [];
+      };
 
       while (true) {
         const { done, value } = await reader.read();
@@ -75,52 +112,21 @@ export function useChat(): UseChatReturn {
         const lines = buffer.split("\n");
         buffer = lines.pop() || "";
 
-        let eventType = "";
-        let dataLines: string[] = [];
-
         for (const line of lines) {
           if (line === "") {
-            // Blank line = dispatch accumulated event
-            if (eventType && dataLines.length > 0) {
-              const dataStr = dataLines.join("\n");
-              try {
-                const data = JSON.parse(dataStr);
-
-                if (TRACE_EVENTS.has(eventType)) {
-                  const traceEvent: TraceEvent = {
-                    id: `evt-${eventCounter.current++}`,
-                    event: eventType,
-                    data,
-                    timestamp: Date.now(),
-                  };
-                  setTraceEvents((prev) => [...prev, traceEvent]);
-                }
-
-                if (eventType === "text") {
-                  assistantContent = data.content;
-                } else if (eventType === "done") {
-                  setStats({
-                    latency_ms: data.total_latency_ms,
-                    input_tokens: data.input_tokens,
-                    output_tokens: data.output_tokens,
-                    tool_calls: data.tool_calls,
-                  });
-                } else if (eventType === "error") {
-                  assistantContent = data.message;
-                }
-              } catch {
-                // skip malformed JSON
-              }
-            }
-            eventType = "";
-            dataLines = [];
+            dispatchEvent();
           } else if (line.startsWith("event:")) {
+            // New event starting — dispatch any pending one first
+            dispatchEvent();
             eventType = line.slice(6).trim();
           } else if (line.startsWith("data:")) {
             dataLines.push(line.slice(5).trim());
           }
         }
       }
+
+      // Dispatch any remaining event after stream ends
+      dispatchEvent();
 
       if (assistantContent) {
         setMessages((prev) => [

@@ -16,6 +16,9 @@ env/
 # Auto-generated embeddings
 knowledge_base/embeddings/
 
+# Generated quotes
+generated_quotes/
+
 # IDE
 .vscode/
 .idea/

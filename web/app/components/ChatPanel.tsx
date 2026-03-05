@@ -3,10 +3,41 @@
 import { useState, useRef, useEffect } from "react";
 import type { ChatMessage } from "../hooks/useChat";
 
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "");
+
 interface ChatPanelProps {
   messages: ChatMessage[];
   isLoading: boolean;
   onSend: (message: string) => void;
+}
+
+function isSafeHref(url: string): boolean {
+  if (url.startsWith("/")) return true;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function renderContent(content: string) {
+  const parts = content.split(/(\[[^\]]+\]\([^)]+\))/g);
+  return parts.map((part, i) => {
+    const match = part.match(/\[([^\]]+)\]\(([^)]+)\)/);
+    if (match) {
+      const rawHref = match[2];
+      if (!isSafeHref(rawHref)) return <span key={i}>{match[1]}</span>;
+      const href = rawHref.startsWith("/") ? `${API_URL}${rawHref}` : rawHref;
+      return (
+        <a key={i} href={href} target="_blank" rel="noopener noreferrer"
+           className="inline-flex items-center gap-1 underline text-amber-300 hover:text-amber-200">
+          {match[1]}
+        </a>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
 }
 
 export default function ChatPanel({ messages, isLoading, onSend }: ChatPanelProps) {
@@ -75,7 +106,7 @@ export default function ChatPanel({ messages, isLoading, onSend }: ChatPanelProp
                   : "bg-zinc-800 text-zinc-200"
               }`}
             >
-              <p className="whitespace-pre-wrap">{msg.content}</p>
+              <p className="whitespace-pre-wrap">{renderContent(msg.content)}</p>
             </div>
           </div>
         ))}
