@@ -153,10 +153,14 @@ goldline-agent/
 │   ├── test_prompts.py           # 10 tests: branding, prompt integrity
 │   ├── test_knowledge.py         # 6 tests: embeddings, staleness
 │   ├── test_history.py           # 6 tests: thread store
-│   └── evals/                    # LLM behavioral evals (7 tests)
-│       ├── test_stock_leakage.py
-│       ├── test_scope_and_brand.py
-│       └── test_tool_routing.py
+│   └── evals/                    # LLM behavioral evals (29 tests)
+│       ├── golden_set.json       # 16 parametrized test cases
+│       ├── test_golden_set.py    # Data-driven eval runner
+│       ├── test_hallucination.py # Hallucination detection (4 tests)
+│       ├── test_quote_flow.py    # Multi-turn quote generation (2 tests)
+│       ├── test_stock_leakage.py # Quantity sanitization (6 tests)
+│       ├── test_scope_and_brand.py # Scope + brand (4 tests)
+│       └── test_tool_routing.py  # Tool selection (3 tests)
 ├── pyproject.toml
 ├── CLAUDE.md
 └── STATUS.md
@@ -370,7 +374,9 @@ Agent persona: **Aria**, 3-year GoldLine customer support specialist.
 
 ## 10. Testing
 
-**59 unit tests + 7 LLM evals**
+**59 unit tests + 29 LLM evals = 88 total**
+
+### Unit Tests
 
 | Test File | Tests | Coverage |
 |-----------|-------|----------|
@@ -378,14 +384,24 @@ Agent persona: **Aria**, 3-year GoldLine customer support specialist.
 | `test_prompts.py` | 10 | Branding variables, no hardcoded values, policy/tool/scope presence |
 | `test_knowledge.py` | 6 | Embedding staleness detection, relevance threshold |
 | `test_history.py` | 6 | Thread creation, message save/retrieve, thread isolation |
-| `evals/test_stock_leakage.py` | 6 | Quantity sanitization under various query patterns |
-| `evals/test_scope_and_brand.py` | 4* | Scope boundaries, brand consistency |
-| `evals/test_tool_routing.py` | 3* | Correct tool selection per question type |
 
-*Evals marked `SKIPPED` without API keys.
+### LLM Behavioral Evals
+
+| Test File | Tests | Coverage |
+|-----------|-------|----------|
+| `evals/test_golden_set.py` | 16 | Data-driven: product search, policy lookup, quotes, greetings, scope boundaries, brand identity, pricing, stock language, recommendations |
+| `evals/test_hallucination.py` | 4 | Agent doesn't invent products, prices, or policies; handles empty DB results |
+| `evals/test_quote_flow.py` | 2 | Multi-turn quote flow: DB lookup → generate_quote tool chain |
+| `evals/test_stock_leakage.py` | 6 | Quantity sanitization under various query patterns |
+| `evals/test_scope_and_brand.py` | 4 | Scope boundaries, brand consistency |
+| `evals/test_tool_routing.py` | 3 | Correct tool selection per question type |
+
+Golden set cases are defined in `evals/golden_set.json` — each case specifies `expected_tools`, `forbidden_tools`, `response_must_contain_any`, and `response_must_not_contain` for deterministic evaluation.
+
+Evals require `ANTHROPIC_API_KEY` in `.env` — tests skip gracefully without it.
 
 ```bash
-uv run pytest tests/ -v              # All tests
+uv run pytest tests/ -v              # All 88 tests
 uv run pytest tests/evals/ -v        # LLM evals only (needs API keys)
 ```
 

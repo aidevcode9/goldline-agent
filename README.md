@@ -150,13 +150,13 @@ web/app/
 
 knowledge_base/documents/     # 5 company policy markdown files
 inventory/                    # SQLite DB + seeder (215 products)
-tests/                        # 59 unit tests + 7 LLM evals
+tests/                        # 59 unit tests + 29 LLM evals
 ```
 
 ## Testing
 
 ```bash
-uv run pytest tests/ -v                # All tests (59 pass)
+uv run pytest tests/ -v                # All 88 tests
 uv run pytest tests/evals/ -v          # LLM evals only (needs API keys)
 ```
 
@@ -166,7 +166,12 @@ uv run pytest tests/evals/ -v          # LLM evals only (needs API keys)
 | System prompt integrity | 10 | Branding, no hardcoded values, policy presence |
 | Knowledge base | 6 | Embedding staleness, relevance threshold |
 | Conversation history | 6 | Thread creation, save/retrieve, isolation |
-| LLM behavioral evals | 7 | Stock leakage, scope boundaries, tool routing |
+| Golden set evals | 16 | Product search, policy lookup, quotes, greetings, scope, brand, pricing |
+| Hallucination detection | 4 | No fake products, prices, or policies |
+| Multi-turn quote flow | 2 | DB lookup → generate_quote tool chain |
+| Stock leakage evals | 6 | Quantity sanitization under various query patterns |
+| Scope & brand evals | 4 | Scope boundaries, brand consistency |
+| Tool routing evals | 3 | Correct tool selection per question type |
 
 ## Regenerating Data
 
