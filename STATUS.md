@@ -3,13 +3,18 @@
 Last updated: 2026-03-04
 
 ## Now
-- Add unit tests + LLM evals
+- Polish web UI, end-to-end testing with live API
 
 ## Next
-- Add web UI (Next.js + FastAPI)
+- Deploy (Vercel frontend + API hosting)
+- Add conversation history persistence to web UI
 
 ## Done (This Week)
-- Initial repo setup and demo polish
+- Built Next.js frontend with Agent Reasoning View (split-screen: chat + trace)
+- Created FastAPI backend with SSE streaming (/chat/stream endpoint)
+- Added ChatPanel, TracePanel, useChat hook with AbortController
+- Adversarial review: fixed SSE parser, XSS prevention, accessibility
+- Unit tests (47 passing) + LLM evals (7)
 - Refactored agent.py into SOLID modules (knowledge, tools, prompts, history)
 - Fixed 2 CRITICAL + 5 HIGH security issues from adversarial review
 
@@ -21,3 +26,4 @@ Last updated: 2026-03-04
 - uv for dependency management
 - pytest + pytest-asyncio for testing
 - Evals use real LLM calls, marked separately from unit tests
+- Agent Reasoning View as "wow factor" — real-time trace of tool calls, SQL, latency, tokens
