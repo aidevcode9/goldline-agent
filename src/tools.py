@@ -1,5 +1,6 @@
 """Tool definitions and execution for the GoldLine agent."""
 
+import json
 import logging
 import re
 import sqlite3
@@ -59,7 +60,52 @@ SEARCH_KNOWLEDGE_BASE_TOOL: ToolParam = {
     },
 }
 
-ALL_TOOLS: list[ToolParam] = [QUERY_DATABASE_TOOL, SEARCH_KNOWLEDGE_BASE_TOOL]
+GENERATE_QUOTE_TOOL: ToolParam = {
+    "name": "generate_quote",
+    "description": (
+        "Generate a branded PDF quote for a customer. Use this after looking up "
+        "product prices with query_database. Provide the product IDs and quantities; "
+        "the tool will validate prices from the database."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "customer_name": {
+                "type": "string",
+                "description": "Customer name or company for the quote header. Use 'Valued Customer' if unknown.",
+            },
+            "items": {
+                "type": "array",
+                "description": "Line items for the quote",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "product_id": {
+                            "type": "integer",
+                            "description": "Product ID from the inventory database",
+                        },
+                        "quantity": {
+                            "type": "integer",
+                            "description": "Quantity requested",
+                        },
+                    },
+                    "required": ["product_id", "quantity"],
+                },
+            },
+            "notes": {
+                "type": "string",
+                "description": "Optional notes to include on the quote",
+            },
+        },
+        "required": ["items"],
+    },
+}
+
+ALL_TOOLS: list[ToolParam] = [
+    QUERY_DATABASE_TOOL,
+    SEARCH_KNOWLEDGE_BASE_TOOL,
+    GENERATE_QUOTE_TOOL,
+]
 
 
 # Column names that should have their values replaced with stock labels
@@ -165,5 +211,31 @@ async def execute_tool(
         if on_tool_call:
             on_tool_call("Searching knowledge base...")
         return await knowledge_base.search(query=tool_input["query"])
+
+    if tool_name == "generate_quote":
+        if on_tool_call:
+            on_tool_call("Generating PDF quote...")
+        from src.quotes import generate_quote_pdf
+
+        try:
+            result = generate_quote_pdf(
+                db_path=db_path,
+                items=tool_input["items"],
+                customer_name=tool_input.get("customer_name", "Valued Customer"),
+                notes=tool_input.get("notes"),
+            )
+            return json.dumps({
+                "status": "success",
+                "quote_number": result["quote_number"],
+                "filename": result["filename"],
+                "total": result["total"],
+                "download_url": f"/quotes/{result['filename']}",
+                "message": f"Quote {result['quote_number']} generated successfully.",
+            })
+        except ValueError as e:
+            return json.dumps({"status": "error", "message": str(e)})
+        except Exception:
+            logger.exception("Quote generation failed")
+            return json.dumps({"status": "error", "message": "Quote generation failed. Please try again."})
 
     return f"Error: Unknown tool {tool_name}"
