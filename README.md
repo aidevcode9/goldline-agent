@@ -80,11 +80,19 @@ uv run goldline
 ### Environment Variables
 
 ```bash
-ANTHROPIC_API_KEY=sk-ant-...         # Required: Claude API
-OPENAI_API_KEY=sk-proj-...           # Required: Embeddings
-LANGSMITH_API_KEY=lsv2_pt_...        # Optional: Tracing
+# Required
+ANTHROPIC_API_KEY=sk-ant-...         # Claude API
+OPENAI_API_KEY=sk-proj-...           # Embeddings
+
+# Optional — Tracing
+LANGSMITH_API_KEY=lsv2_pt_...
 LANGSMITH_TRACING=true
 LANGSMITH_PROJECT=goldline-agent
+
+# Optional — Deployment (defaults work for local dev)
+CORS_ORIGINS=http://localhost:3000   # Comma-separated allowed origins
+DATABASE_PATH=                       # Default: inventory/inventory.db
+QUOTE_OUTPUT_DIR=                    # Default: generated_quotes/
 ```
 
 ## Features
@@ -172,6 +180,52 @@ uv run pytest tests/evals/ -v          # LLM evals only (needs API keys)
 | Stock leakage evals | 6 | Quantity sanitization under various query patterns |
 | Scope & brand evals | 4 | Scope boundaries, brand consistency |
 | Tool routing evals | 3 | Correct tool selection per question type |
+
+## Deployment
+
+### Frontend → Vercel
+
+1. Import repo on [vercel.com](https://vercel.com) → "Add New Project"
+2. Set **Root Directory** to `web`
+3. Add environment variable:
+
+| Variable | Value |
+|----------|-------|
+| `NEXT_PUBLIC_API_URL` | `https://<your-railway-url>` |
+
+4. Deploy — Vercel auto-detects Next.js
+
+### Backend → Railway
+
+1. Create project on [railway.com](https://railway.com) → "Deploy from GitHub Repo"
+2. Railway auto-detects the `Dockerfile`
+3. Add a **persistent volume** mounted at `/data`
+4. Set environment variables:
+
+| Variable | Value | Required |
+|----------|-------|----------|
+| `ANTHROPIC_API_KEY` | `sk-ant-...` | Yes |
+| `OPENAI_API_KEY` | `sk-proj-...` | Yes |
+| `CORS_ORIGINS` | `https://your-app.vercel.app` | Yes |
+| `DATABASE_PATH` | `/data/inventory.db` | Yes |
+| `QUOTE_OUTPUT_DIR` | `/data/quotes` | Yes |
+| `PORT` | `8000` | Yes |
+| `LANGSMITH_API_KEY` | `lsv2_pt_...` | Optional |
+| `LANGSMITH_TRACING` | `true` | Optional |
+| `LANGSMITH_PROJECT` | `goldline-agent` | Optional |
+
+5. Deploy — the startup script auto-seeds the DB on first run
+
+**Important:** After both are deployed, copy the Vercel URL into Railway's `CORS_ORIGINS` and the Railway URL into Vercel's `NEXT_PUBLIC_API_URL`.
+
+### Security
+
+- All API keys are environment variables — never committed to Git
+- CORS restricted to your Vercel domain only
+- Railway volumes encrypted at rest
+- Both platforms enforce HTTPS by default
+- SQL allowlist (SELECT/PRAGMA only) prevents destructive queries
+- PDF downloads validated with filename regex + path traversal prevention
 
 ## Regenerating Data
 

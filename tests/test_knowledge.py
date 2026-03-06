@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from src.knowledge import KnowledgeBase, MIN_RELEVANCE_THRESHOLD
+from src.config import KB_RELEVANCE_THRESHOLD
+from src.knowledge import KnowledgeBase
 
 
 class TestEmbeddingsAreStale:
@@ -74,4 +75,4 @@ class TestSearchRelevanceThreshold:
         assert "not loaded" in result
 
     def test_threshold_constant_is_reasonable(self):
-        assert 0.1 <= MIN_RELEVANCE_THRESHOLD <= 0.5
+        assert 0.1 <= KB_RELEVANCE_THRESHOLD <= 0.5

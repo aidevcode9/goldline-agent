@@ -14,7 +14,7 @@ from openai import AsyncOpenAI
 from langsmith import traceable
 from langsmith.wrappers import wrap_anthropic
 
-from src.config import AGENT_NAME, MODEL
+from src.config import AGENT_NAME, DATABASE_PATH, MODEL
 from src.history import new_thread_id, get_messages, save_messages
 from src.knowledge import KnowledgeBase
 from src.prompts import build_system_prompt
@@ -56,7 +56,7 @@ def _truncate_history(messages: list) -> list:
 async def chat(question: str, tid: str | None = None) -> dict:
     """Process a user question and return assistant response."""
     tid = tid or thread_id
-    db_path = str(Path(__file__).parent.parent / "inventory" / "inventory.db")
+    db_path = DATABASE_PATH
 
     history = _truncate_history(get_messages(tid))
     messages = history + [{"role": "user", "content": question}]
@@ -134,7 +134,7 @@ async def chat_stream(
         error — something went wrong
     """
     tid = tid or thread_id
-    db_path = str(Path(__file__).parent.parent / "inventory" / "inventory.db")
+    db_path = DATABASE_PATH
     request_start = time.monotonic()
     total_input_tokens = 0
     total_output_tokens = 0

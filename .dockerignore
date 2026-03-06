@@ -1,0 +1,12 @@
+.env
+.env.*
+__pycache__
+.venv
+.git
+web/
+node_modules/
+.pytest_cache
+generated_quotes/
+tests/
+*.pyc
+.claude/

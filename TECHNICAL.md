@@ -12,11 +12,11 @@
                                                |
 +------------------+    SSE     +----------------------------------+     SDK      +------------------+
 |                  |  /chat/    |                                  |  ----------> |  Anthropic API   |
-|   Next.js Web    |  stream   |        FastAPI Backend           |              |  Claude Haiku    |
-|   (port 3000)    | --------> |        (port 8000)               |              |  4.5             |
+|   Next.js Web    |  stream    |        FastAPI Backend           |              |  Claude Haiku    |
+|                  | -------->  |                                  |              |  4.5             |
 |                  |            |                                  | <----------  +------------------+
 |  +------------+  |    JSON    |  +----------+    +-----------+   |   response
-|  | ChatPanel  |  | <-----    |  | agent.py |    | api.py    |   |
+|  | ChatPanel  |  | <-----     |  | agent.py |    | api.py    |   |
 |  +------------+  |    SSE     |  |          |    |           |   |     SDK      +------------------+
 |  +------------+  |  events    |  | Tool     |    | /health   |   |  ----------> |  OpenAI API      |
 |  | TracePanel |  |            |  | Loop     |    | /chat     |   |              |  Embeddings      |
@@ -25,22 +25,19 @@
 |  | useChat    |  |  GET       |       |          | /quotes/  |   | <----------  +------------------+
 |  | (SSE hook) |  |  /quotes/  |       v          |  {file}   |   |   embeddings
 |  +------------+  |  {file}    |  +---------+     +-----------+   |
-+------------------+ --------> |  | tools.py |                    |
++------------------+ -------->  |  | tools.py|                    |
         ^                       |  +---------+                    |
         |                       |   |   |   |                     |
    User Browser                 |   v   v   v                     |
-                                |  +--+ +-+ +--+                  |
-                                |  |DB| |KB| |Q |                 |
-                                |  +--+ +--+ +--+                 |
-                                +---|----|----|-------------------+
-                                    |    |    |
-                          +---------+    |    +-----------+
+                                +---|----|--|---------------------+
+                                    |    |  |
+                          +---------+    |  +-------------+
                           v              v                v
                    +------------+  +------------+  +------------+
-                   | SQLite     |  | Knowledge  |  | generated  |
-                   | inventory  |  | Base       |  | _quotes/   |
-                   | .db        |  | /documents |  | *.pdf      |
-                   | (215 items)|  | (5 docs)   |  |            |
+                   | SQL Db     |  | Knowledge  |  | generated  |
+                   | Item       |  | Base       |  | _quotes/   |
+                   | Catalog    |  | /documents |  | *.pdf      |
+                   |            |  |            |  |            |
                    +------------+  +------------+  +------------+
 ```
 
@@ -161,6 +158,10 @@ goldline-agent/
 │       ├── test_stock_leakage.py # Quantity sanitization (6 tests)
 │       ├── test_scope_and_brand.py # Scope + brand (4 tests)
 │       └── test_tool_routing.py  # Tool selection (3 tests)
+├── Dockerfile                    # Railway deployment
+├── .dockerignore
+├── scripts/
+│   └── start.sh                  # Startup: DB seeding + server
 ├── pyproject.toml
 ├── CLAUDE.md
 └── STATUS.md
@@ -202,8 +203,8 @@ Semantic search over company policy documents.
 |----------|-------|
 | Input | `query` (natural language) |
 | Method | Cosine similarity on OpenAI embeddings |
-| Top-K | 2 results |
-| Threshold | 0.3 minimum relevance |
+| Top-K | 2 results (`KB_TOP_K` in config) |
+| Threshold | 0.4 minimum relevance (`KB_RELEVANCE_THRESHOLD` in config) |
 | Cache | `knowledge_base/embeddings/embeddings.json` |
 | Auto-refresh | Detects when docs are newer than cache |
 
@@ -411,14 +412,25 @@ uv run pytest tests/evals/ -v        # LLM evals only (needs API keys)
 
 ### Environment Variables
 
-```bash
-ANTHROPIC_API_KEY=sk-ant-...         # Required: Claude API
-OPENAI_API_KEY=sk-proj-...           # Required: Embeddings
-LANGSMITH_API_KEY=lsv2_pt_...        # Optional: Tracing
-LANGSMITH_TRACING=true
-LANGSMITH_PROJECT=goldline-agent
-NEXT_PUBLIC_API_URL=http://localhost:8000  # Frontend → Backend
-```
+#### Backend (Python/FastAPI)
+
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `ANTHROPIC_API_KEY` | — | Yes | Claude API key |
+| `OPENAI_API_KEY` | — | Yes | OpenAI key (embeddings only) |
+| `CORS_ORIGINS` | `http://localhost:3000` | No | Comma-separated allowed origins |
+| `DATABASE_PATH` | `inventory/inventory.db` | No | Path to SQLite database |
+| `QUOTE_OUTPUT_DIR` | `generated_quotes/` | No | Directory for generated PDFs |
+| `PORT` | `8000` | No | Server port |
+| `LANGSMITH_API_KEY` | — | No | LangSmith tracing key |
+| `LANGSMITH_TRACING` | `true` | No | Enable/disable tracing |
+| `LANGSMITH_PROJECT` | `goldline-agent` | No | LangSmith project name |
+
+#### Frontend (Next.js)
+
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | No | Backend API URL (client-side) |
 
 ### Branding Constants (`src/config.py`)
 
@@ -433,6 +445,9 @@ SALES_EMAIL     = "sales@goldlineoffice.com"
 MODEL           = "claude-haiku-4-5-20251001"
 TAX_RATE        = 0.08
 QUOTE_VALIDITY_DAYS = 30
+EMBEDDING_MODEL = "text-embedding-3-small"
+KB_TOP_K        = 2
+KB_RELEVANCE_THRESHOLD = 0.4
 ```
 
 ---
@@ -463,7 +478,90 @@ uv run goldline
 
 ---
 
-## 13. Product Catalog
+## 13. Deployment
+
+### Architecture (Production)
+
+```
+                    Internet
+                       |
+          +------------+------------+
+          |                         |
+  +-------v--------+      +--------v--------+
+  |   Vercel CDN   |      |    Railway      |
+  |   (Frontend)   |      |    (Backend)    |
+  |                |      |                 |
+  |  Next.js 16   |  --> |  FastAPI + uv   |
+  |  Static + SSR  | SSE  |  Dockerfile     |
+  +----------------+      +---+----+----+---+
+                               |    |    |
+                          +----+  +-+-+  +----+
+                          v       v   v       v
+                      +------+ +---+ +---+ +--------+
+                      |/data/| |KB | |LLM| |LangSmith|
+                      |vol.  | |   | |API| |        |
+                      +------+ +---+ +---+ +--------+
+                      SQLite    5 docs  Claude  Traces
+                      + PDFs            Haiku
+```
+
+### Frontend → Vercel
+
+1. Import repo at [vercel.com](https://vercel.com) → "Add New Project"
+2. Set **Root Directory** to `web` (the Next.js app lives in `web/`)
+3. Framework: Next.js (auto-detected)
+4. Add environment variable: `NEXT_PUBLIC_API_URL` = your Railway backend URL
+5. Deploy
+
+### Backend → Railway
+
+1. Create project at [railway.com](https://railway.com) → "Deploy from GitHub Repo"
+2. Railway auto-detects `Dockerfile`
+3. Add **persistent volume** → mount path: `/data`
+4. Set environment variables (see table in Section 11)
+5. Key Railway-specific values:
+   - `DATABASE_PATH` = `/data/inventory.db`
+   - `QUOTE_OUTPUT_DIR` = `/data/quotes`
+   - `CORS_ORIGINS` = `https://your-app.vercel.app`
+   - `PORT` = `8000`
+6. Deploy — `scripts/start.sh` auto-seeds DB on first run
+
+### Post-Deploy Wiring
+
+After both platforms are live:
+1. Copy Railway's public URL → set as `NEXT_PUBLIC_API_URL` in Vercel
+2. Copy Vercel's URL → set as `CORS_ORIGINS` in Railway
+3. Redeploy both if needed (Vercel needs rebuild for `NEXT_PUBLIC_` vars)
+
+### Startup Script (`scripts/start.sh`)
+
+Handles first-deploy initialization:
+- Checks if `DATABASE_PATH` exists on the persistent volume
+- If not, seeds it by running `inventory/seed_inventory.py` and copying to volume
+- Creates `QUOTE_OUTPUT_DIR` if it doesn't exist
+- Starts uvicorn on `0.0.0.0:$PORT`
+
+### Security (Production)
+
+| Layer | Protection |
+|-------|-----------|
+| API keys | Environment variables in Railway/Vercel dashboards, never in Git |
+| CORS | Restricted to configured origins only (default: localhost) |
+| HTTPS | Enforced by both Vercel and Railway by default |
+| SQL | SELECT/PRAGMA allowlist + read-only SQLite connection |
+| PDFs | Filename regex + path traversal prevention |
+| Storage | Railway volumes encrypted at rest |
+| Secrets | `.gitignore` excludes `.env*` files |
+
+### Limitations (Demo)
+
+- **Conversation history**: In-memory — resets on deploy/restart
+- **Single instance**: SQLite doesn't support concurrent write from multiple replicas
+- **No auth**: Public demo — anyone with the URL can chat
+
+---
+
+## 14. Product Catalog
 
 215 products across 19 categories:
 
@@ -486,7 +584,7 @@ uv run goldline
 
 ---
 
-## 14. Key Design Decisions
+## 15. Key Design Decisions
 
 | Decision | Rationale |
 |----------|-----------|

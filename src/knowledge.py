@@ -8,8 +8,7 @@ import numpy as np
 from langsmith import traceable
 from openai import AsyncOpenAI
 
-EMBEDDING_MODEL = "text-embedding-3-small"
-MIN_RELEVANCE_THRESHOLD = 0.3
+from src.config import EMBEDDING_MODEL, KB_RELEVANCE_THRESHOLD, KB_TOP_K
 
 
 class KnowledgeBase:
@@ -42,7 +41,7 @@ class KnowledgeBase:
         return len(self.docs)
 
     @traceable(name="search_knowledge_base", run_type="tool")
-    async def search(self, query: str, top_k: int = 2) -> str:
+    async def search(self, query: str, top_k: int = KB_TOP_K) -> str:
         """Search knowledge base using semantic similarity."""
         if not self.docs or not self.embeddings:
             return "Error: Knowledge base not loaded"
@@ -61,7 +60,7 @@ class KnowledgeBase:
 
         similarities.sort(key=lambda x: x[1], reverse=True)
         top_results = [
-            (i, s) for i, s in similarities[:top_k] if s >= MIN_RELEVANCE_THRESHOLD
+            (i, s) for i, s in similarities[:top_k] if s >= KB_RELEVANCE_THRESHOLD
         ]
 
         if not top_results:
