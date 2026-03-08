@@ -19,6 +19,9 @@ knowledge_base/embeddings/
 # Generated quotes
 generated_quotes/
 
+# SQLite database (regenerate with: uv run python inventory/seed_inventory.py)
+inventory/inventory.db
+
 # IDE
 .vscode/
 .idea/
