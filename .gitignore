@@ -22,6 +22,12 @@ generated_quotes/
 # SQLite database (regenerate with: uv run python inventory/seed_inventory.py)
 inventory/inventory.db
 
+# Generated reports
+reports/
+
+# Claude Code commands (personal workflow slash commands)
+.claude/commands/
+
 # IDE
 .vscode/
 .idea/

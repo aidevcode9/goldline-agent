@@ -1,11 +1,19 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useChat } from "./hooks/useChat";
 import ChatPanel from "./components/ChatPanel";
 import TracePanel from "./components/TracePanel";
 
 export default function Home() {
+  const router = useRouter();
   const { messages, traceEvents, isLoading, stats, sendMessage, resetChat } = useChat();
+
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+    router.refresh();
+  }
 
   return (
     <div className="flex h-screen flex-col">
@@ -19,9 +27,17 @@ export default function Home() {
             GoldLine Office Supplies
           </span>
         </div>
-        <span className="rounded-md bg-zinc-800 px-2.5 py-1 text-xs text-zinc-400">
-          Agent Reasoning View
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="rounded-md bg-zinc-800 px-2.5 py-1 text-xs text-zinc-400">
+            Agent Reasoning View
+          </span>
+          <button
+            onClick={handleLogout}
+            className="rounded-md px-2.5 py-1 text-xs text-zinc-500 transition-colors hover:text-zinc-300 hover:bg-zinc-800"
+          >
+            Sign out
+          </button>
+        </div>
       </header>
 
       {/* Split Panels */}

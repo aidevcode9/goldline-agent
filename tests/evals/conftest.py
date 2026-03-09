@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from anthropic import AsyncAnthropic
+from langsmith.wrappers import wrap_anthropic
 
 from src.config import MODEL
 from src.prompts import build_system_prompt
@@ -20,7 +21,7 @@ def eval_client():
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         pytest.skip("ANTHROPIC_API_KEY not set — skipping evals")
-    return AsyncAnthropic(api_key=api_key)
+    return wrap_anthropic(AsyncAnthropic(api_key=api_key))
 
 
 @pytest.fixture(scope="session")

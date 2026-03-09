@@ -8,6 +8,26 @@ from src.prompts import build_system_prompt
 from src.tools import ALL_TOOLS
 
 
+def _mock_db_result(query: str) -> str:
+    """Return realistic mock DB results based on the SQL query type."""
+    q = query.lower().strip()
+    if "sqlite_master" in q:
+        return "[('products',)]"
+    if q.startswith("pragma"):
+        return (
+            "[(0, 'id', 'INTEGER', 1, None, 1), "
+            "(1, 'name', 'TEXT', 1, None, 0), "
+            "(2, 'category', 'TEXT', 1, None, 0), "
+            "(3, 'price', 'REAL', 1, None, 0), "
+            "(4, 'quantity', 'INTEGER', 1, None, 0)]"
+        )
+    # Default: product search result
+    return (
+        "Columns: id, name, category, price, stock_status\n"
+        "[(1, 'Copy Paper 500 Sheets', 'Paper', 8.99, 'In Stock')]"
+    )
+
+
 @pytest.mark.eval
 class TestQuoteFlow:
     @pytest.mark.asyncio
@@ -34,18 +54,17 @@ class TestQuoteFlow:
             f"First turn should call query_database, got: {tool_names}"
         )
 
-        # Simulate tool loop — provide mock DB result so we can see
-        # if the agent then calls generate_quote
+        # Simulate tool loop — provide mock DB results so the agent
+        # can proceed through schema discovery → product search → generate_quote
         messages.append({"role": "assistant", "content": response.content})
 
-        # Add mock tool results for each tool call
         tool_results = []
         for tc in tool_calls:
             if tc.name == "query_database":
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": tc.id,
-                    "content": "[(1, 'Copy Paper 500 Sheets', 'Paper', 8.99, 'in_stock')]",
+                    "content": _mock_db_result(tc.input.get("query", "")),
                 })
             else:
                 tool_results.append({
@@ -56,12 +75,12 @@ class TestQuoteFlow:
 
         messages.append({"role": "user", "content": tool_results})
 
-        # Continue tool loop for up to 3 more turns until we see
-        # generate_quote or a text mention of quoting
+        # Continue tool loop for up to 5 more turns (schema discovery can
+        # take 2-3 turns before the agent has enough info for generate_quote)
         all_tool_names = list(tool_names)
         full_text = ""
 
-        for _turn in range(3):
+        for _turn in range(5):
             response_n = await eval_client.messages.create(
                 model=MODEL,
                 max_tokens=4096,
@@ -93,7 +112,7 @@ class TestQuoteFlow:
                     mock_results.append({
                         "type": "tool_result",
                         "tool_use_id": tc.id,
-                        "content": "[(1, 'Copy Paper 500 Sheets', 'Paper', 8.99, 'in_stock')]",
+                        "content": _mock_db_result(tc.input.get("query", "")),
                     })
                 elif tc.name == "generate_quote":
                     mock_results.append({

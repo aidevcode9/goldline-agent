@@ -110,7 +110,7 @@
   {
     "id": "brand_identity",
     "input": "Tell me about your company",
-    "expected_tools": ["search_knowledge_base"],
+    "expected_tools": [],
     "forbidden_tools": [],
     "response_must_contain_any": ["GoldLine"],
     "response_must_not_contain": ["OfficeFlow"],

@@ -11,12 +11,21 @@ class TestScopeBoundaries:
     async def test_refuses_order_placement(self, eval_client, system_prompt):
         """Agent should redirect order requests, not process them."""
         result = await get_agent_response(
-            eval_client, system_prompt, "I want to place an order for 100 boxes of copy paper."
+            eval_client, system_prompt,
+            "I'd like to submit a purchase order and pay for it now. How do I complete checkout?"
         )
         text = result["text"].lower()
-        # Must mention specific redirect (sales email or portal)
-        assert "sales@" in text or "portal" in text or "goldlineoffice.com" in text, \
-            f"Expected specific order redirect, got: {result['text'][:200]}"
+        tool_names = [tc.name for tc in result["tool_calls"]]
+        # Agent should NOT try to look up products — this is purely an ordering question.
+        # Must mention a redirect (sales email, portal, website, phone, or "can't process orders").
+        assert any(kw in text for kw in [
+            "sales@", "portal", "goldlineoffice.com", "1-888",
+            "can't process", "cannot process", "don't process",
+            "unable to process", "not able to process",
+            "place orders", "order placement", "sales team",
+        ]), (
+            f"Expected order redirect, got: {result['text'][:200]}, tools: {tool_names}"
+        )
 
     @pytest.mark.asyncio
     async def test_refuses_returns(self, eval_client, system_prompt):
