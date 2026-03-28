@@ -20,6 +20,23 @@ _ALLOWED_SQL_PATTERN = re.compile(
     r"^\s*(SELECT|PRAGMA)\s", re.IGNORECASE
 )
 
+# Tables the LLM is allowed to query (block access to quotes, etc.)
+_ALLOWED_TABLES = {"products", "sqlite_master", "sqlite_sequence"}
+
+# Enforce a max row limit on all SELECT queries
+_MAX_ROWS = 50
+
+# Pattern to detect table names referenced in FROM / JOIN clauses
+_TABLE_REF_PATTERN = re.compile(
+    r"\b(?:FROM|JOIN)\s+[\"']?(\w+)[\"']?", re.IGNORECASE
+)
+
+
+def _sql_references_allowed_tables_only(query: str) -> bool:
+    """Return True if the query only references allowed tables."""
+    tables = _TABLE_REF_PATTERN.findall(query)
+    return all(t.lower() in _ALLOWED_TABLES for t in tables)
+
 QUERY_DATABASE_TOOL: ToolParam = {
     "name": "query_database",
     "description": "SQL query to get information about our inventory for customers like products, quantities and prices.",
@@ -128,41 +145,34 @@ def _classify_stock(quantity: int) -> str:
 def _sanitize_results(
     rows: list[tuple],
     column_names: list[str] | None = None,
+    query: str = "",
 ) -> list[tuple]:
     """Replace quantity column values with stock-level labels.
 
-    If column_names are provided (from cursor.description), only columns
-    whose names match _QUANTITY_COLUMNS are sanitized. Otherwise falls back
-    to sanitizing all integer values (conservative).
+    Uses a conservative approach: any integer column is sanitized UNLESS
+    it can be positively identified as a safe column (like id or price).
+    This prevents leaking exact stock numbers via column aliases or
+    computed expressions.
     """
     if not rows:
         return []
 
-    # Determine which column indices to sanitize
-    if column_names:
-        sanitize_indices = {
-            i for i, name in enumerate(column_names)
-            if name.lower() in _QUANTITY_COLUMNS
-        }
-    else:
-        sanitize_indices = None  # fallback: sanitize all integers
+    # Columns known to be safe (non-sensitive integers like IDs)
+    _SAFE_INT_COLUMNS = {"id", "product_id", "rowid"}
 
     sanitized = []
     for row in rows:
         new_row = []
         for i, val in enumerate(row):
-            if sanitize_indices is not None:
-                # Column-aware: only sanitize identified quantity columns
-                if i in sanitize_indices and isinstance(val, int):
-                    new_row.append(_classify_stock(val))
-                else:
+            if isinstance(val, int) and not isinstance(val, bool):
+                # Only skip sanitization if we can confirm this is a safe column
+                col_name = column_names[i].lower() if column_names and i < len(column_names) else ""
+                if col_name in _SAFE_INT_COLUMNS:
                     new_row.append(val)
+                else:
+                    new_row.append(_classify_stock(val))
             else:
-                # Fallback: sanitize all integers (except booleans)
-                if isinstance(val, int) and not isinstance(val, bool):
-                    new_row.append(_classify_stock(val))
-                else:
-                    new_row.append(val)
+                new_row.append(val)
         sanitized.append(tuple(new_row))
     return sanitized
 
@@ -173,11 +183,14 @@ def query_database(query: str, db_path: str) -> str:
     if not _ALLOWED_SQL_PATTERN.match(query):
         return "Only SELECT and PRAGMA queries are allowed."
 
+    if not _sql_references_allowed_tables_only(query):
+        return "Access denied. You may only query the products table."
+
     try:
         conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
         cursor = conn.cursor()
         cursor.execute(query)
-        results = cursor.fetchall()
+        results = cursor.fetchmany(_MAX_ROWS)
 
         # Extract column names from cursor.description when available
         column_names = (
@@ -187,7 +200,7 @@ def query_database(query: str, db_path: str) -> str:
         )
 
         conn.close()
-        return str(_sanitize_results(results, column_names))
+        return str(_sanitize_results(results, column_names, query))
     except Exception as e:
         logger.exception("Database query failed")
         return "Database query failed. Please try a different query."

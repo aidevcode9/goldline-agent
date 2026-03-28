@@ -1,10 +1,8 @@
 """GoldLine Agent — chat orchestration."""
 
-import json
 import logging
 import os
 import time
-from pathlib import Path
 from typing import AsyncGenerator, Callable, Optional
 
 from dotenv import load_dotenv
@@ -52,26 +50,29 @@ def _truncate_history(messages: list) -> list:
     return messages[-MAX_HISTORY_MESSAGES:]
 
 
-@traceable(name=AGENT_NAME, run_type="chain")
-async def chat(question: str, tid: str | None = None) -> dict:
-    """Process a user question and return assistant response."""
-    tid = tid or thread_id
-    db_path = DATABASE_PATH
+async def _run_tool_loop(
+    question: str, tid: str, on_tool: Optional[Callable[[str], None]] = None
+) -> AsyncGenerator[dict, None]:
+    """Core tool loop. Yields structured events consumed by chat() and chat_stream().
 
+    Events yielded:
+        api_response  — an API call completed (contains response with usage)
+        tool_call     — a tool is about to be invoked (contains block)
+        tool_result   — a tool returned (contains block, result, latency_ms)
+        final         — loop finished (contains content, messages, thread_id)
+    """
+    db_path = DATABASE_PATH
     history = _truncate_history(get_messages(tid))
     messages = history + [{"role": "user", "content": question}]
 
-    try:
-        response = await client.messages.create(
-            model=MODEL,
-            max_tokens=4096,
-            system=system_prompt,
-            messages=messages,
-            tools=ALL_TOOLS,
-        )
-    except APIError:
-        logger.exception("Anthropic API error")
-        return {"messages": messages, "output": "I'm having trouble connecting right now. Please try again in a moment."}
+    response = await client.messages.create(
+        model=MODEL,
+        max_tokens=4096,
+        system=system_prompt,
+        messages=messages,
+        tools=ALL_TOOLS,
+    )
+    yield {"type": "api_response", "response": response}
 
     iterations = 0
     while response.stop_reason == "tool_use" and iterations < MAX_TOOL_ITERATIONS:
@@ -81,30 +82,38 @@ async def chat(question: str, tid: str | None = None) -> dict:
         tool_results = []
         for block in response.content:
             if block.type == "tool_use":
+                yield {"type": "tool_call", "block": block, "iteration": iterations}
+
+                tool_start = time.monotonic()
                 result = await execute_tool(
                     block.name,
                     block.input,
                     db_path=db_path,
                     knowledge_base=knowledge_base,
-                    on_tool_call=tool_callback,
+                    on_tool_call=on_tool,
                 )
+                tool_latency = round((time.monotonic() - tool_start) * 1000)
+
+                yield {
+                    "type": "tool_result",
+                    "block": block,
+                    "result": result,
+                    "latency_ms": tool_latency,
+                }
                 tool_results.append(
                     {"type": "tool_result", "tool_use_id": block.id, "content": result}
                 )
 
         messages.append({"role": "user", "content": tool_results})
 
-        try:
-            response = await client.messages.create(
-                model=MODEL,
-                max_tokens=4096,
-                system=system_prompt,
-                messages=messages,
-                tools=ALL_TOOLS,
-            )
-        except APIError:
-            logger.exception("Anthropic API error during tool loop")
-            return {"messages": messages, "output": "I'm having trouble connecting right now. Please try again in a moment."}
+        response = await client.messages.create(
+            model=MODEL,
+            max_tokens=4096,
+            system=system_prompt,
+            messages=messages,
+            tools=ALL_TOOLS,
+        )
+        yield {"type": "api_response", "response": response}
 
     if iterations >= MAX_TOOL_ITERATIONS:
         logger.warning("Tool loop hit max iterations (%d)", MAX_TOOL_ITERATIONS)
@@ -117,7 +126,29 @@ async def chat(question: str, tid: str | None = None) -> dict:
     messages.append({"role": "assistant", "content": final_content})
     save_messages(tid, messages)
 
-    return {"messages": messages, "output": final_content, "thread_id": tid}
+    yield {"type": "final", "content": final_content, "messages": messages, "thread_id": tid}
+
+
+@traceable(name=AGENT_NAME, run_type="chain")
+async def chat(question: str, tid: str | None = None) -> dict:
+    """Process a user question and return assistant response."""
+    tid = tid or thread_id
+    try:
+        async for event in _run_tool_loop(question, tid, on_tool=tool_callback):
+            if event["type"] == "final":
+                return {
+                    "messages": event["messages"],
+                    "output": event["content"],
+                    "thread_id": event["thread_id"],
+                }
+    except APIError:
+        logger.exception("Anthropic API error")
+
+    return {
+        "messages": [],
+        "output": "I'm having trouble connecting right now. Please try again in a moment.",
+        "thread_id": tid,
+    }
 
 
 async def chat_stream(
@@ -134,103 +165,48 @@ async def chat_stream(
         error — something went wrong
     """
     tid = tid or thread_id
-    db_path = DATABASE_PATH
     request_start = time.monotonic()
     total_input_tokens = 0
     total_output_tokens = 0
     tool_call_count = 0
 
-    history = _truncate_history(get_messages(tid))
-    messages = history + [{"role": "user", "content": question}]
-
     yield {"event": "thinking", "data": {"status": "Processing your question..."}}
 
     try:
-        response = await client.messages.create(
-            model=MODEL,
-            max_tokens=4096,
-            system=system_prompt,
-            messages=messages,
-            tools=ALL_TOOLS,
-        )
-        total_input_tokens += response.usage.input_tokens
-        total_output_tokens += response.usage.output_tokens
+        async for event in _run_tool_loop(question, tid):
+            if event["type"] == "api_response":
+                total_input_tokens += event["response"].usage.input_tokens
+                total_output_tokens += event["response"].usage.output_tokens
+
+            elif event["type"] == "tool_call":
+                tool_call_count += 1
+                yield {
+                    "event": "tool_call",
+                    "data": {
+                        "tool": event["block"].name,
+                        "input": event["block"].input,
+                        "iteration": event["iteration"],
+                    },
+                }
+
+            elif event["type"] == "tool_result":
+                yield {
+                    "event": "tool_result",
+                    "data": {
+                        "tool": event["block"].name,
+                        "result": event["result"][:500],
+                        "latency_ms": event["latency_ms"],
+                    },
+                }
+                yield {"event": "thinking", "data": {"status": "Analyzing results..."}}
+
+            elif event["type"] == "final":
+                yield {"event": "text", "data": {"content": event["content"]}}
+
     except APIError:
         logger.exception("Anthropic API error")
         yield {"event": "error", "data": {"message": "I'm having trouble connecting right now. Please try again in a moment."}}
         return
-
-    iterations = 0
-    while response.stop_reason == "tool_use" and iterations < MAX_TOOL_ITERATIONS:
-        iterations += 1
-        messages.append({"role": "assistant", "content": response.content})
-
-        tool_results = []
-        for block in response.content:
-            if block.type == "tool_use":
-                tool_call_count += 1
-
-                yield {
-                    "event": "tool_call",
-                    "data": {
-                        "tool": block.name,
-                        "input": block.input,
-                        "iteration": iterations,
-                    },
-                }
-
-                tool_start = time.monotonic()
-                result = await execute_tool(
-                    block.name,
-                    block.input,
-                    db_path=db_path,
-                    knowledge_base=knowledge_base,
-                )
-                tool_latency = round((time.monotonic() - tool_start) * 1000)
-
-                yield {
-                    "event": "tool_result",
-                    "data": {
-                        "tool": block.name,
-                        "result": result[:500],  # truncate for UI
-                        "latency_ms": tool_latency,
-                    },
-                }
-
-                tool_results.append(
-                    {"type": "tool_result", "tool_use_id": block.id, "content": result}
-                )
-
-        messages.append({"role": "user", "content": tool_results})
-
-        yield {"event": "thinking", "data": {"status": "Analyzing results..."}}
-
-        try:
-            response = await client.messages.create(
-                model=MODEL,
-                max_tokens=4096,
-                system=system_prompt,
-                messages=messages,
-                tools=ALL_TOOLS,
-            )
-            total_input_tokens += response.usage.input_tokens
-            total_output_tokens += response.usage.output_tokens
-        except APIError:
-            logger.exception("Anthropic API error during tool loop")
-            yield {"event": "error", "data": {"message": "I'm having trouble connecting right now. Please try again in a moment."}}
-            return
-
-    if iterations >= MAX_TOOL_ITERATIONS:
-        final_content = "I'm sorry, I wasn't able to complete your request. Could you try rephrasing your question?"
-    else:
-        final_content = "".join(
-            block.text for block in response.content if isinstance(block, TextBlock)
-        )
-
-    messages.append({"role": "assistant", "content": final_content})
-    save_messages(tid, messages)
-
-    yield {"event": "text", "data": {"content": final_content}}
 
     total_latency = round((time.monotonic() - request_start) * 1000)
     yield {

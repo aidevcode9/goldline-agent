@@ -3,6 +3,7 @@
 import logging
 import re
 import sqlite3
+import uuid
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -67,20 +68,11 @@ def _ensure_quotes_table(db_path: str) -> None:
     conn.close()
 
 
-def _next_quote_number(db_path: str) -> str:
-    """Generate next sequential quote number: GQ-YYYYMMDD-NNNN."""
+def _next_quote_number() -> str:
+    """Generate a non-guessable quote number: GQ-YYYYMMDD-<uuid8>."""
     today = date.today().strftime("%Y%m%d")
-    prefix = f"GQ-{today}-"
-
-    conn = sqlite3.connect(db_path)
-    row = conn.execute(
-        "SELECT COUNT(*) FROM quotes WHERE quote_number LIKE ?",
-        (f"{prefix}%",),
-    ).fetchone()
-    seq = (row[0] if row else 0) + 1
-    conn.close()
-
-    return f"{prefix}{seq:04d}"
+    short_id = uuid.uuid4().hex[:8].upper()
+    return f"GQ-{today}-{short_id}"
 
 
 def _validate_and_fetch_items(db_path: str, items: list[dict]) -> list[dict]:
@@ -160,7 +152,7 @@ def generate_quote_pdf(
 
     _ensure_quotes_table(db_path)
     enriched_items = _validate_and_fetch_items(db_path, items)
-    quote_number = _next_quote_number(db_path)
+    quote_number = _next_quote_number()
 
     today = date.today()
     valid_until = today + timedelta(days=QUOTE_VALIDITY_DAYS)

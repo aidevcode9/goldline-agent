@@ -161,7 +161,8 @@ class TestQueryDatabase:
 
     def test_invalid_sql_returns_generic_error(self, temp_db):
         result = query_database("SELECT * FROM nonexistent_table", temp_db)
-        assert result == "Database query failed. Please try a different query."
+        # Table allowlist blocks access to unknown tables
+        assert "Access denied" in result or "Database query failed" in result
         assert "nonexistent_table" not in result
 
     def test_pragma_works(self, temp_db):
