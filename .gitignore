@@ -28,6 +28,12 @@ reports/
 # Claude Code commands (personal workflow slash commands)
 .claude/commands/
 
+# Playwright MCP (screenshots, console logs)
+.playwright-mcp/
+
+# MCP config (local)
+.mcp.json
+
 # IDE
 .vscode/
 .idea/
