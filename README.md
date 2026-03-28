@@ -93,6 +93,15 @@ LANGSMITH_PROJECT=goldline-agent
 CORS_ORIGINS=http://localhost:3000   # Comma-separated allowed origins
 DATABASE_PATH=                       # Default: inventory/inventory.db
 QUOTE_OUTPUT_DIR=                    # Default: generated_quotes/
+
+# Optional — API Security (disabled when unset = local dev)
+API_SECRET_KEY=                      # Bearer token for API auth
+RATE_LIMIT_PER_MIN=20                # Max requests per IP per minute
+
+# Frontend Auth (set in Vercel for production)
+AUTH_EMAIL=goldline@agent.com
+AUTH_PASSWORD=<your-password>
+AUTH_PASSCODE=<your-passcode>
 ```
 
 ## Features
@@ -119,7 +128,7 @@ Customers can request formal quotes and receive downloadable branded PDFs:
 - Gold-branded header with company info
 - Line items table with validated pricing from database
 - Subtotal, tax (8%), and total
-- 30-day validity, sequential quote numbering (`GQ-YYYYMMDD-NNNN`)
+- 30-day validity, non-guessable quote numbering (`GQ-YYYYMMDD-<uuid>`)
 
 ### Conversational Memory
 
@@ -127,12 +136,19 @@ Thread-based conversation history — the agent remembers context across turns. 
 
 ### Security Hardening
 
-- Stock quantities never exposed (code-level sanitization, not just prompt)
-- SQL allowlist (SELECT/PRAGMA only, read-only connection)
-- PDF text sanitization (control chars stripped, length caps)
-- Path traversal prevention on quote downloads
-- XSS-safe link rendering in frontend
-- Price validation from database (LLM cannot hallucinate prices)
+- **API authentication** — Bearer token auth on all protected endpoints (`API_SECRET_KEY` env var)
+- **Rate limiting** — Per-IP sliding window (configurable, default 20 req/min)
+- **Input validation** — Message length capped at 4,000 characters
+- **SQL table allowlist** — Only `products` table accessible; `quotes` and other tables blocked
+- **Row limits** — SQL queries capped at 50 rows to prevent data exfiltration
+- **Stock quantity protection** — Conservative sanitization: all unknown integers replaced with stock labels (immune to column alias bypass)
+- **SQL statement allowlist** — SELECT/PRAGMA only, read-only database connection
+- **Non-guessable quote IDs** — UUID-based (`GQ-YYYYMMDD-<uuid8>`) instead of sequential
+- **PDF text sanitization** — Control chars stripped, length caps on all user input
+- **Path traversal prevention** — Regex + resolve check on quote downloads
+- **CORS** — Restricted methods/headers, configurable origins
+- **XSS-safe** — Link rendering validates http/https only
+- **Price validation** — Tool fetches real prices from DB (LLM cannot hallucinate prices)
 
 ## Project Structure
 
@@ -187,11 +203,14 @@ uv run pytest tests/evals/ -v          # LLM evals only (needs API keys)
 
 1. Import repo on [vercel.com](https://vercel.com) → "Add New Project"
 2. Set **Root Directory** to `web`
-3. Add environment variable:
+3. Add environment variables:
 
-| Variable | Value |
-|----------|-------|
-| `NEXT_PUBLIC_API_URL` | `https://<your-railway-url>` |
+| Variable | Value | Required |
+|----------|-------|----------|
+| `NEXT_PUBLIC_API_URL` | `https://<your-railway-url>` | Yes |
+| `AUTH_EMAIL` | Login email | Yes |
+| `AUTH_PASSWORD` | Login password | Yes |
+| `AUTH_PASSCODE` | Access code | Yes |
 
 4. Deploy — Vercel auto-detects Next.js
 
@@ -210,6 +229,7 @@ uv run pytest tests/evals/ -v          # LLM evals only (needs API keys)
 | `DATABASE_PATH` | `/data/inventory.db` | Yes |
 | `QUOTE_OUTPUT_DIR` | `/data/quotes` | Yes |
 | `PORT` | `8000` | Yes |
+| `API_SECRET_KEY` | Random secret for API auth | Yes |
 | `LANGSMITH_API_KEY` | `lsv2_pt_...` | Optional |
 | `LANGSMITH_TRACING` | `true` | Optional |
 | `LANGSMITH_PROJECT` | `goldline-agent` | Optional |
@@ -221,10 +241,13 @@ uv run pytest tests/evals/ -v          # LLM evals only (needs API keys)
 ### Security
 
 - All API keys are environment variables — never committed to Git
+- **API auth** — Set `API_SECRET_KEY` in Railway; frontend proxies requests through Next.js
+- **Rate limiting** — Per-IP throttle prevents API abuse (configurable via `RATE_LIMIT_PER_MIN`)
 - CORS restricted to your Vercel domain only
 - Railway volumes encrypted at rest
 - Both platforms enforce HTTPS by default
-- SQL allowlist (SELECT/PRAGMA only) prevents destructive queries
+- SQL table allowlist (products only) + statement allowlist (SELECT/PRAGMA) + row limit (50)
+- Quote IDs are UUID-based (non-enumerable)
 - PDF downloads validated with filename regex + path traversal prevention
 
 ## Regenerating Data

@@ -39,9 +39,12 @@ Uses LangSmith for tracing, OpenAI for embeddings, SQLite for inventory.
 - Use `uv` for all dependency management — no pip, no requirements.txt
 
 ## Red Flags
-- Don't expose actual stock quantities to users (see stock policy in system prompt)
+- Don't expose actual stock quantities to users (conservative sanitization in tools.py)
 - Don't commit .env files or API keys
 - Don't modify knowledge base docs without regenerating embeddings (happens automatically on next run)
+- SQL queries restricted to `products` table only — don't add other tables to the allowlist without review
+- API auth (`API_SECRET_KEY`) is disabled when env var unset (local dev only) — always set in production
+- Quote IDs use UUIDs — don't revert to sequential numbering (enumeration risk)
 
 ## Testing
 - Unit tests: `uv run pytest tests/ -m "not eval" -v`

@@ -343,8 +343,15 @@ Base URL: `http://localhost:8000`
 
 | Threat | Mitigation | Location |
 |--------|-----------|----------|
-| Stock quantity leakage | Column-aware sanitization at code level | `tools.py:_sanitize_results` |
+| Unauthenticated API access | Bearer token auth via `API_SECRET_KEY` env var | `api.py:_verify_api_key` |
+| API abuse / cost attack | Per-IP sliding window rate limiter (default 20/min) | `api.py:_check_rate_limit` |
+| Oversized input | Message length capped at 4,000 characters | `api.py:ChatRequest` |
+| Stock quantity leakage | Conservative sanitization: all unknown integers replaced with stock labels | `tools.py:_sanitize_results` |
+| Stock sanitization bypass (column aliases) | Only `id`/`product_id` exempt from sanitization; all other ints sanitized | `tools.py:_sanitize_results` |
 | SQL injection | SELECT/PRAGMA allowlist + read-only connection | `tools.py:query_database` |
+| Unauthorized table access | Table allowlist: only `products`/`sqlite_master` queryable | `tools.py:_sql_references_allowed_tables_only` |
+| Data exfiltration | Row limit: `fetchmany(50)` on all queries | `tools.py:query_database` |
+| Quote ID enumeration | UUID-based quote numbers (`GQ-YYYYMMDD-<uuid8>`) | `quotes.py:_next_quote_number` |
 | Path traversal (quotes) | Regex filename validation + resolve/startswith check | `api.py:download_quote` |
 | XSS via markdown links | Safe href validation (http/https only) | `ChatPanel.tsx:isSafeHref` |
 | PDF text injection | Sanitize + truncate customer_name/notes, strip control chars | `quotes.py:_sanitize_text` |
@@ -353,7 +360,7 @@ Base URL: `http://localhost:8000`
 | Exception leakage | Generic error messages, internal logging only | `tools.py:execute_tool` |
 | Stale SSE events after abort | AbortController + signal check in dispatchEvent | `useChat.ts` |
 | API keys in source | `.env` file, gitignored | `.gitignore` |
-| CORS | Restricted to `http://localhost:3000` | `api.py` |
+| CORS | Restricted origins + specific methods/headers (GET, POST, OPTIONS) | `api.py` |
 
 ---
 
@@ -545,10 +552,15 @@ Handles first-deploy initialization:
 
 | Layer | Protection |
 |-------|-----------|
+| API auth | Bearer token via `API_SECRET_KEY` on all `/chat` and `/quotes` endpoints |
+| Rate limiting | Per-IP sliding window, configurable via `RATE_LIMIT_PER_MIN` (default 20) |
+| Input validation | Message length capped at 4,000 characters |
 | API keys | Environment variables in Railway/Vercel dashboards, never in Git |
-| CORS | Restricted to configured origins only (default: localhost) |
+| CORS | Restricted origins + specific methods/headers only |
 | HTTPS | Enforced by both Vercel and Railway by default |
-| SQL | SELECT/PRAGMA allowlist + read-only SQLite connection |
+| SQL | Table allowlist (products only) + statement allowlist + row limit (50) |
+| Stock protection | Conservative integer sanitization (immune to column alias bypass) |
+| Quote IDs | UUID-based, non-enumerable |
 | PDFs | Filename regex + path traversal prevention |
 | Storage | Railway volumes encrypted at rest |
 | Secrets | `.gitignore` excludes `.env*` files |
@@ -557,7 +569,6 @@ Handles first-deploy initialization:
 
 - **Conversation history**: In-memory — resets on deploy/restart
 - **Single instance**: SQLite doesn't support concurrent write from multiple replicas
-- **No auth**: Public demo — anyone with the URL can chat
 
 ---
 

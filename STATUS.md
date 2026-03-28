@@ -1,15 +1,26 @@
 # STATUS
 
-Last updated: 2026-03-04
+Last updated: 2026-03-27
 
 ## Now
-- End-to-end testing with live API, demo polish
+- Deploy (Vercel frontend + API hosting)
 
 ## Next
-- Deploy (Vercel frontend + API hosting)
 - Add LRU/TTL eviction to in-memory thread store (production hardening)
+- Rotate API keys (CRIT-1 from adversarial review — keys exposed in .env)
 
 ## Done (This Week)
+- Security hardening from adversarial review (3 CRIT, 5 HIGH fixed):
+  - API auth middleware (bearer token via API_SECRET_KEY env var)
+  - SQL table allowlist (products only) + row limit (50 max)
+  - Stock quantity sanitization hardened (conservative: all unknown ints sanitized)
+  - Input length validation (4000 char max) + per-IP rate limiting (20/min)
+  - Non-guessable quote IDs (UUID-based instead of sequential)
+  - CORS tightened (specific methods/headers instead of wildcards)
+- UI visual overhaul — glass morphism login, gradient header, color-coded trace events, ambient glow effects, markdown bold/italic rendering, icon-enhanced quick actions
+- End-to-end testing with live API, demo polish
+
+## Archive
 - Added conversational memory — thread_id plumbing between backend/frontend, "New Chat" button
 - Added PDF quote generator tool (generate_quote) with branded PDFs, security hardening
 - Expanded product catalog from 15 to 215 items across 18 categories
